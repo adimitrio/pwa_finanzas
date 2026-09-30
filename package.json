@@ -9,7 +9,7 @@
     "lint": "oxlint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "predeploy": "npm run build",
+    "predeploy": "tsc -b && vite build --base=/pwa_finanzas/",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
