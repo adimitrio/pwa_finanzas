@@ -24,7 +24,11 @@ const MEDIO_LABELS: Record<MedioPago, string> = {
   credito: 'Crédito',
 }
 
-export default function CargarGasto() {
+interface Props {
+  onVolver: () => void
+}
+
+export default function CargarGasto({ onVolver }: Props) {
   // pesos acumulados desde el teclado numérico (centavos = pesos * 100)
   const [pesos, setPesos] = useState(0)
   const [categoria, setCategoria] = useState<Categoria>('otros')
@@ -67,12 +71,24 @@ export default function CargarGasto() {
     setGuardado(true)
     setTimeout(() => setGuardado(false), 1200)
     resetForm()
+    onVolver()
   }
 
   const montoDisplay = pesos.toLocaleString('es-AR')
 
   return (
     <main className="min-h-screen bg-[#f5f0e8] flex flex-col items-center px-4 py-8 max-w-sm mx-auto">
+
+      {/* Volver sin guardar */}
+      <button
+        id="btn-volver"
+        type="button"
+        onClick={onVolver}
+        aria-label="Volver"
+        className="self-start text-2xl text-stone-400 hover:text-stone-600 transition-colors mb-2"
+      >
+        ✕
+      </button>
 
       {/* Monto */}
       <section className="w-full mb-6">

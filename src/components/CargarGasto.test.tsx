@@ -14,7 +14,7 @@ beforeEach(async () => {
 
 describe('Teclado numérico', () => {
   it('tocar 1,5,0,0 muestra "1.500"', () => {
-    render(<CargarGasto />)
+    render(<CargarGasto onVolver={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /^1$/ }))
     fireEvent.click(screen.getByRole('button', { name: /^5$/ }))
     // el botón 0 aparece dos veces (dos clicks en la misma tecla)
@@ -28,7 +28,7 @@ describe('Teclado numérico', () => {
 
 describe('Categoría', () => {
   it('elegir "comida" la deja marcada como activa', () => {
-    render(<CargarGasto />)
+    render(<CargarGasto onVolver={vi.fn()} />)
     const btn = screen.getByRole('button', { name: /comida/i })
     fireEvent.click(btn)
     expect(btn).toHaveAttribute('aria-pressed', 'true')
@@ -38,7 +38,7 @@ describe('Categoría', () => {
 describe('Guardar', () => {
   it('llama a db.gastos.add con monto en centavos enteros (150000)', async () => {
     const spy = vi.spyOn(db.gastos, 'add')
-    render(<CargarGasto />)
+    render(<CargarGasto onVolver={vi.fn()} />)
 
     // Cargar 1500 pesos → 150000 centavos
     fireEvent.click(screen.getByRole('button', { name: /^1$/ }))
@@ -57,7 +57,7 @@ describe('Guardar', () => {
   })
 
   it('después de guardar el monto vuelve a "0"', async () => {
-    render(<CargarGasto />)
+    render(<CargarGasto onVolver={vi.fn()} />)
 
     fireEvent.click(screen.getByRole('button', { name: /^1$/ }))
     fireEvent.click(screen.getByRole('button', { name: /^5$/ }))
