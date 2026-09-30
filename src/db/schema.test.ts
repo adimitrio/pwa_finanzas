@@ -6,6 +6,7 @@ beforeEach(async () => {
   await db.gastos.clear()
   await db.gastosFijos.clear()
   await db.ingresos.clear()
+  await db.periodos.clear()
 })
 
 describe('Gasto', () => {
@@ -47,7 +48,8 @@ describe('Ingreso', () => {
   it('guarda y lee un Ingreso exactamente', async () => {
     const ingreso: Ingreso = {
       id: crypto.randomUUID(),
-      mes: '2024-09',
+      periodoId: 'p1',
+      nombre: 'Sueldo',
       montoNeto: 180000000,
       actualizadoEn: Date.now(),
     }

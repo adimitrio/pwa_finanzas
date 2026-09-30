@@ -10,6 +10,7 @@ export interface Gasto {
   categoria: Categoria
   medioPago: MedioPago
   fecha: string          // 'YYYY-MM-DD'
+  descripcion?: string   // ej. 'Deuda mes anterior'
   actualizadoEn: number  // Date.now()
 }
 
@@ -21,10 +22,19 @@ export interface GastoFijo {
   actualizadoEn: number
 }
 
+export interface Periodo {
+  id: string
+  fechaInicio: string  // 'YYYY-MM-DD', el día que se cobró
+  fechaFin?: string    // ausente mientras es el período actual
+  nombre: string       // ej. 'Octubre 2026', lo elige el usuario
+  actualizadoEn: number
+}
+
 export interface Ingreso {
   id: string
-  mes: string          // 'YYYY-MM'
-  montoNeto: number    // centavos
+  periodoId: string
+  nombre: string       // 'Sueldo', 'Bono', 'Saldo mes anterior', etc.
+  montoNeto: number    // centavos, siempre positivo
   actualizadoEn: number
 }
 
@@ -32,6 +42,7 @@ class FinanzasDB extends Dexie {
   gastos!: Table<Gasto, string>
   gastosFijos!: Table<GastoFijo, string>
   ingresos!: Table<Ingreso, string>
+  periodos!: Table<Periodo, string>
 
   constructor() {
     super('finanzas')
@@ -39,6 +50,12 @@ class FinanzasDB extends Dexie {
       gastos: 'id, fecha, categoria',
       gastosFijos: 'id, activo',
       ingresos: 'id, mes'
+    })
+    this.version(2).stores({
+      gastos: 'id, fecha, categoria',
+      gastosFijos: 'id, activo',
+      ingresos: 'id, periodoId',
+      periodos: 'id, fechaInicio'
     })
   }
 }
