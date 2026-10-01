@@ -28,11 +28,20 @@ async function agregarIngreso(montoNeto: number, periodoId = PERIODO_ID) {
   })
 }
 
-async function agregarGasto(monto: number, fecha = HOY, id: string = crypto.randomUUID()) {
+async function agregarGasto(
+  monto: number,
+  fecha = HOY,
+  id: string = crypto.randomUUID(),
+  extra: { esFijo?: boolean; descripcion?: string } = {}
+) {
   await db.gastos.add({
-    id, monto, categoria: 'super', medioPago: 'debito', fecha, actualizadoEn: Date.now(),
+    id, monto, categoria: 'super', medioPago: 'debito', fecha,
+    esFijo: false, actualizadoEn: Date.now(), ...extra,
   })
 }
+
+const expandir = (id: 'toggle-ingresos' | 'toggle-gastos') =>
+  fireEvent.click(document.getElementById(id) as HTMLElement)
 
 const porId = (id: string) =>
   waitFor(() => {
@@ -59,7 +68,6 @@ function cerrarPeriodoUI(nombre: string, fechaFin?: string) {
 
 beforeEach(async () => {
   await db.gastos.clear()
-  await db.gastosFijos.clear()
   await db.ingresos.clear()
   await db.periodos.clear()
   vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -70,15 +78,10 @@ afterEach(() => {
 })
 
 describe('Inicio', () => {
-  it('muestra el saldo con ingresos, fijos activos y solo los gastos dentro del período', async () => {
+  it('muestra el saldo: fijos y gastos comunes descuentan por igual, y solo los del período', async () => {
     await crearPeriodo('2026-01-01')
     await agregarIngreso(50000000)
-    await db.gastosFijos.add({
-      id: crypto.randomUUID(), nombre: 'Alquiler', monto: 10000000, activo: true, actualizadoEn: Date.now(),
-    })
-    await db.gastosFijos.add({
-      id: crypto.randomUUID(), nombre: 'Gym', monto: 5000000, activo: false, actualizadoEn: Date.now(),
-    })
+    await agregarGasto(10000000, '2026-03-05', undefined, { esFijo: true }) // alquiler
     await agregarGasto(2000000, '2026-03-10')
     // anterior al inicio del período: no cuenta
     await agregarGasto(9999900, '2025-12-31')
@@ -92,6 +95,8 @@ describe('Inicio', () => {
   it('agregar un ingreso lo persiste en el período actual y suma al saldo', async () => {
     await crearPeriodo()
     render(<Inicio onCargarGasto={vi.fn()} />)
+    await porId('toggle-ingresos')
+    expandir('toggle-ingresos')
 
     fireEvent.change(await porId('input-ingreso-nombre'), { target: { value: 'Bono' } })
     fireEvent.change(document.getElementById('input-ingreso-monto') as HTMLElement, {
@@ -105,22 +110,58 @@ describe('Inicio', () => {
     expect(ingresos[0]).toMatchObject({ periodoId: PERIODO_ID, nombre: 'Bono', montoNeto: 100000 })
   })
 
-  it('agregar un gasto fijo lo persiste y aparece en la lista', async () => {
-    await crearPeriodo()
+  it('un gasto con esFijo: true aparece en "Fijos" del período actual, con su total', async () => {
+    await crearPeriodo('2026-01-01')
+    await agregarGasto(1500000, '2026-03-05', undefined, { esFijo: true, descripcion: 'Luz marzo' })
+    await agregarGasto(700000, '2026-03-06') // común: no va a Fijos
+    await agregarGasto(900000, '2025-12-20', undefined, { esFijo: true, descripcion: 'Luz vieja' }) // otro período
     render(<Inicio onCargarGasto={vi.fn()} />)
-    fireEvent.change(await porId('input-nuevo-nombre'), { target: { value: 'Internet' } })
-    fireEvent.change(document.getElementById('input-nuevo-monto') as HTMLElement, {
-      target: { value: '15000' },
-    })
-    fireEvent.click(document.getElementById('btn-agregar-gasto-fijo') as HTMLElement)
+    await porId('toggle-gastos')
+    expandir('toggle-gastos')
 
-    expect(await screen.findByText('Internet')).toBeInTheDocument()
-    const guardados = await db.gastosFijos.toArray()
-    expect(guardados).toHaveLength(1)
-    expect(guardados[0]).toMatchObject({ nombre: 'Internet', monto: 1500000, activo: true })
+    const fijos = await porId('gastos-fijos')
+    expect(fijos).toHaveTextContent('Luz marzo')
+    expect(fijos).not.toHaveTextContent('Luz vieja')
+    expect(fijos.querySelectorAll('.bg-stone-50')).toHaveLength(1)
+    expect(document.getElementById('total-fijos')).toHaveTextContent('$15.000')
   })
 
-  it('las tarjetas quedan agrupadas: Ingresos, Gastos (Fijos + Últimos) y Cerrar período', async () => {
+  it('"Últimos" marca con la etiqueta "Fijo" solo a los gastos fijos', async () => {
+    await crearPeriodo('2026-01-01')
+    await agregarGasto(1500000, '2026-03-05', undefined, { esFijo: true })
+    await agregarGasto(700000, '2026-03-06')
+    render(<Inicio onCargarGasto={vi.fn()} />)
+    await porId('toggle-gastos')
+    expandir('toggle-gastos')
+
+    await porId('gastos-fijos')
+    // una en "Últimos" (la subsección "Fijos" no usa la etiqueta)
+    expect(screen.getAllByText('Fijo')).toHaveLength(1)
+  })
+
+  it('tocar el encabezado de "Ingresos" o "Gastos" alterna si el contenido se ve', async () => {
+    await crearPeriodo()
+    render(<Inicio onCargarGasto={vi.fn()} />)
+    await porId('toggle-ingresos')
+
+    // arrancan colapsadas
+    expect(document.getElementById('input-ingreso-nombre')).toBeNull()
+    expect(document.getElementById('gastos-fijos')).toBeNull()
+    expect(document.getElementById('toggle-ingresos')).toHaveAttribute('aria-expanded', 'false')
+
+    expandir('toggle-ingresos')
+    expect(document.getElementById('input-ingreso-nombre')).not.toBeNull()
+    expect(document.getElementById('toggle-ingresos')).toHaveAttribute('aria-expanded', 'true')
+    expandir('toggle-ingresos')
+    expect(document.getElementById('input-ingreso-nombre')).toBeNull()
+
+    expandir('toggle-gastos')
+    expect(document.getElementById('gastos-fijos')).not.toBeNull()
+    expandir('toggle-gastos')
+    expect(document.getElementById('gastos-fijos')).toBeNull()
+  })
+
+  it('las tarjetas quedan agrupadas: Ingresos, Gastos y Cerrar período', async () => {
     await crearPeriodo()
     render(<Inicio onCargarGasto={vi.fn()} />)
     await porId('display-saldo')

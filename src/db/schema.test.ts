@@ -1,10 +1,9 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
-import { db, type Gasto, type GastoFijo, type Ingreso } from './schema'
+import { db, type Gasto, type Ingreso } from './schema'
 
 beforeEach(async () => {
   await db.gastos.clear()
-  await db.gastosFijos.clear()
   await db.ingresos.clear()
   await db.periodos.clear()
 })
@@ -17,6 +16,7 @@ describe('Gasto', () => {
       categoria: 'super',
       medioPago: 'debito',
       fecha: '2024-09-15',
+      esFijo: false,
       actualizadoEn: Date.now(),
     }
 
@@ -24,23 +24,6 @@ describe('Gasto', () => {
     const leido = await db.gastos.get(gasto.id)
 
     expect(leido).toEqual(gasto)
-  })
-})
-
-describe('GastoFijo', () => {
-  it('guarda y lee un GastoFijo exactamente', async () => {
-    const gastoFijo: GastoFijo = {
-      id: crypto.randomUUID(),
-      nombre: 'Alquiler',
-      monto: 20000000,
-      activo: true,
-      actualizadoEn: Date.now(),
-    }
-
-    await db.gastosFijos.add(gastoFijo)
-    const leido = await db.gastosFijos.get(gastoFijo.id)
-
-    expect(leido).toEqual(gastoFijo)
   })
 })
 
@@ -69,6 +52,7 @@ describe('Consulta por índice', () => {
       categoria: 'comida',
       medioPago: 'efectivo',
       fecha: '2024-09-01',
+      esFijo: false,
       actualizadoEn: Date.now(),
     }
     const gastoB: Gasto = {
@@ -77,6 +61,7 @@ describe('Consulta por índice', () => {
       categoria: 'transporte',
       medioPago: 'debito',
       fecha: '2024-09-15',
+      esFijo: false,
       actualizadoEn: Date.now(),
     }
 

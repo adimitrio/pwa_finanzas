@@ -22,7 +22,8 @@ todo se guarda localmente en el dispositivo. Cada feature tiene su spec en
   `src/logic/`. Nunca se guarda un resultado calculado en la base.
 
 ## Modelo de datos
-Ver `src/db/schema.ts`. Tres tablas: `gastos`, `gastosFijos`, `ingresos`.
+Ver `src/db/schema.ts`. Tres tablas: `gastos`, `ingresos`, `periodos`. "Fijo" no es
+tabla: es la etiqueta `esFijo` de un `Gasto`.
 No agregar tablas ni campos nuevos que no estén pedidos en un spec.
 
 ## Alcance del MVP — no salirse de acá sin avisar

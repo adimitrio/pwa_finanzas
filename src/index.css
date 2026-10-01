@@ -1,4 +1,18 @@
 @import "tailwindcss";
+@source not "../specs";
+
+@theme {
+  --color-fondo: #F3EFE6;
+  --color-tarjeta-oscura: #1D1C1A;
+  --color-acento: #C9A24D;
+  --color-borde: #E5DFD3;
+
+  --radius-sm: 0px;   /* inputs, botones chicos, teclado, categorías, chips */
+  --radius-md: 0px;   /* tarjetas y botones grandes (Cargar gasto, Guardar, Cerrar) */
+
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+}
 
 body {
   margin: 0;

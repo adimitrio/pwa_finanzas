@@ -10,16 +10,9 @@ export interface Gasto {
   categoria: Categoria
   medioPago: MedioPago
   fecha: string          // 'YYYY-MM-DD'
+  esFijo: boolean        // etiqueta: gasto habitual (luz, alquiler); no descuenta solo
   descripcion?: string   // ej. 'Deuda mes anterior'
   actualizadoEn: number  // Date.now()
-}
-
-export interface GastoFijo {
-  id: string
-  nombre: string
-  monto: number       // centavos
-  activo: boolean
-  actualizadoEn: number
 }
 
 export interface Periodo {
@@ -40,7 +33,6 @@ export interface Ingreso {
 
 class FinanzasDB extends Dexie {
   gastos!: Table<Gasto, string>
-  gastosFijos!: Table<GastoFijo, string>
   ingresos!: Table<Ingreso, string>
   periodos!: Table<Periodo, string>
 
@@ -53,7 +45,7 @@ class FinanzasDB extends Dexie {
     })
     this.version(2).stores({
       gastos: 'id, fecha, categoria',
-      gastosFijos: 'id, activo',
+      gastosFijos: null, // tabla eliminada: ahora "fijo" es una etiqueta en Gasto
       ingresos: 'id, periodoId',
       periodos: 'id, fechaInicio'
     })
