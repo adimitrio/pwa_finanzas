@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import CargarGasto from './CargarGasto'
 import { db } from '../db/schema'
+import type { Gasto } from '../db/schema'
 
 beforeEach(async () => {
   await db.gastos.clear()
@@ -94,7 +95,7 @@ describe('Guardar', () => {
     })
   })
 
-  describe('esFijo y descripción', () => {
+  describe('descripción', () => {
     async function guardarConCinco(preparar?: () => void) {
       render(<CargarGasto onVolver={vi.fn()} />)
       fireEvent.click(screen.getByRole('button', { name: /^5$/ }))
@@ -103,17 +104,6 @@ describe('Guardar', () => {
       await waitFor(async () => expect(await db.gastos.count()).toBe(1))
       return (await db.gastos.toArray())[0]
     }
-
-    it('por defecto guarda esFijo: false', async () => {
-      expect((await guardarConCinco()).esFijo).toBe(false)
-    })
-
-    it('tildar "Es fijo" y guardar persiste esFijo: true', async () => {
-      const gasto = await guardarConCinco(() => {
-        fireEvent.click(screen.getByLabelText('Es fijo'))
-      })
-      expect(gasto.esFijo).toBe(true)
-    })
 
     it('completar "Descripción" y guardar persiste ese texto', async () => {
       const gasto = await guardarConCinco(() => {
@@ -176,5 +166,33 @@ describe('Guardar', () => {
       act(() => { vi.advanceTimersByTime(1000) })
       expect(onVolver).toHaveBeenCalledOnce()
     })
+  })
+})
+
+describe('Edición con monto 0', () => {
+  it('"Guardar cambios" queda deshabilitado si el monto se lleva a 0', () => {
+    const gasto: Gasto = {
+      id: 'g1', monto: 5000, categoria: 'otros',
+      fecha: '2026-10-01', actualizadoEn: 1,
+    }
+    render(<CargarGasto gasto={gasto} onVolver={() => {}} />)
+    const boton = screen.getByRole('button', { name: 'Guardar cambios' })
+    expect(boton).toBeEnabled()
+    fireEvent.click(document.getElementById('tecla-borrar') as HTMLElement)
+    fireEvent.click(document.getElementById('tecla-borrar') as HTMLElement)
+    expect(boton).toBeDisabled()
+  })
+})
+
+describe('Sin medio de pago', () => {
+  it('ni en carga ni en edición existe el grupo "Medio de pago"', () => {
+    const { unmount } = render(<CargarGasto onVolver={() => {}} />)
+    expect(screen.queryByRole('group', { name: 'Medio de pago' })).toBeNull()
+    unmount()
+    const gasto: Gasto = {
+      id: 'g1', monto: 5000, categoria: 'otros', fecha: '2026-10-01', actualizadoEn: 1,
+    }
+    render(<CargarGasto gasto={gasto} onVolver={() => {}} />)
+    expect(screen.queryByRole('group', { name: 'Medio de pago' })).toBeNull()
   })
 })

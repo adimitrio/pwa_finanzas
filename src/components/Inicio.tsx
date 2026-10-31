@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../db/schema'
+import type { Gasto } from '../db/schema'
 import { calcularSaldoDelMes } from '../logic/saldo'
 import {
   obtenerPeriodoActual, calcularAsientoDeCierre, diaSiguiente, gastosDelPeriodo,
 } from '../logic/periodos'
+import { gastosACsv, nombreArchivoCsv } from '../logic/exportarCsv'
+import { descargarArchivo } from '../lib/descargar'
 
 const hoy = () => new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD'
 
@@ -35,9 +38,10 @@ function Chevron({ abierto }: { abierto: boolean }) {
 
 interface Props {
   onCargarGasto: () => void
+  onEditarGasto: (gasto: Gasto) => void
 }
 
-export default function Inicio({ onCargarGasto }: Props) {
+export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
   // ── datos reactivos ──────────────────────────────────────────────────────
   const periodos = useLiveQuery(() => db.periodos.toArray())
   const periodo = periodos ? obtenerPeriodoActual(periodos) : null
@@ -48,11 +52,12 @@ export default function Inicio({ onCargarGasto }: Props) {
   ) ?? []
   const todosLosGastos = useLiveQuery(() => db.gastos.toArray()) ?? []
   const gastosDelMes = periodo ? gastosDelPeriodo(todosLosGastos, periodo) : []
-  const fijosDelMes = gastosDelMes.filter(g => g.esFijo)
-  // actualizadoEn no está indexado (el schema no se toca): se ordena en memoria
-  const ultimosGastos = [...gastosDelMes]
-    .sort((x, y) => y.actualizadoEn - x.actualizadoEn)
-    .slice(0, 10)
+  // Todos los gastos del período, ordenados por fecha desc y actualizadoEn desc
+  const gastosOrdenados = [...gastosDelMes]
+    .sort((x, y) => {
+      if (y.fecha !== x.fecha) return y.fecha.localeCompare(x.fecha)
+      return y.actualizadoEn - x.actualizadoEn
+    })
 
   // ── estado del primer período ────────────────────────────────────────────
   const [primerNombre, setPrimerNombre] = useState('')
@@ -71,11 +76,19 @@ export default function Inicio({ onCargarGasto }: Props) {
   const [ingresosAbierto, setIngresosAbierto] = useState(false)
   const [gastosAbierto, setGastosAbierto] = useState(false)
 
+  // ── exportar CSV ─────────────────────────────────────────────────────────
+  const [exportarAbierto, setExportarAbierto] = useState(false)
+  const [periodoExportarId, setPeriodoExportarId] = useState<string | undefined>(periodoId)
+  // Si cambia el período actual, sincronizar el select si no se tocó
+  const periodoExportar = (periodos ?? []).find(p => p.id === (periodoExportarId ?? periodoId))
+  const gastosExportar = periodoExportar
+    ? gastosDelPeriodo(todosLosGastos, periodoExportar)
+    : []
+
   // ── cálculo de saldo ─────────────────────────────────────────────────────
   const ingresoNeto = ingresos.reduce((acc, i) => acc + i.montoNeto, 0)
   const saldo = calcularSaldoDelMes(ingresoNeto, gastosDelMes)
   const totalGastos = gastosDelMes.reduce((acc, g) => acc + g.monto, 0)
-  const totalFijos = fijosDelMes.reduce((acc, g) => acc + g.monto, 0)
 
   // ── handlers ─────────────────────────────────────────────────────────────
   async function crearPrimerPeriodo() {
@@ -149,9 +162,7 @@ export default function Inicio({ onCargarGasto }: Props) {
             id: crypto.randomUUID(),
             monto: asiento.monto,
             categoria: 'otros',
-            medioPago: 'debito',
             fecha: nuevaFechaInicio,
-            esFijo: false,
             descripcion: asiento.descripcion,
             actualizadoEn: ahora,
           })
@@ -181,7 +192,19 @@ export default function Inicio({ onCargarGasto }: Props) {
     await db.ingresos.delete(id)
   }
 
+  function descargarCsv() {
+    if (!periodoExportar) return
+    const csv = gastosACsv(todosLosGastos, periodoExportar)
+    const nombre = nombreArchivoCsv(periodoExportar)
+    descargarArchivo(nombre, csv, 'text/csv;charset=utf-8')
+  }
+
   const saldoPositivo = saldo >= 0
+
+  // Períodos ordenados del más nuevo al más viejo (para el select de exportar)
+  const periodosOrdenados = [...(periodos ?? [])].sort((a, b) =>
+    b.fechaInicio.localeCompare(a.fechaInicio)
+  )
 
   if (periodos === undefined) return null // cargando
 
@@ -331,58 +354,32 @@ export default function Inicio({ onCargarGasto }: Props) {
         </h2>
 
         {gastosAbierto && (
-          <>
-            {/* Fijos: solo lectura, gastos del período con esFijo */}
-            <div id="gastos-fijos" className="flex flex-col gap-2">
-              <div className="flex items-baseline justify-between">
-                <p className="text-xs text-stone-500 font-medium">Fijos</p>
-                <span id="total-fijos" className="text-xs font-semibold text-stone-500">
-                  {formatARS(totalFijos)}
-                </span>
-              </div>
-              {fijosDelMes.length === 0 && (
-                <p className="text-xs text-stone-300 italic">Sin gastos fijos en este período.</p>
-              )}
-              {fijosDelMes.map(g => (
-                <div key={g.id} className="flex items-center gap-2 bg-stone-50 rounded-sm px-3 py-2">
-                  <div className="flex flex-1 flex-col">
-                    <span className="text-sm text-stone-700 font-medium">
-                      {g.descripcion ?? <span className="capitalize">{g.categoria}</span>}
-                    </span>
-                    <span className="text-xs text-stone-400">{g.fecha}</span>
-                  </div>
-                  <span className="text-sm text-stone-500">{formatARS(g.monto)}</span>
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-stone-500 font-medium">Del período</p>
+            {gastosOrdenados.length === 0 && (
+              <p className="text-xs text-stone-300 italic">Sin gastos registrados.</p>
+            )}
+            {gastosOrdenados.map(g => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => onEditarGasto(g)}
+                aria-label={`Editar gasto ${g.categoria} ${formatARS(g.monto)}`}
+                className="flex items-center justify-between text-sm w-full min-h-[44px] border-b border-stone-50 pb-2 last:border-0 last:pb-0 text-left hover:bg-stone-50 rounded-sm px-1 transition-colors"
+              >
+                <div className="flex flex-col">
+                  <span className="text-stone-700 font-medium capitalize">
+                    {g.categoria}
+                  </span>
+                  {g.descripcion && (
+                    <span className="text-xs text-stone-500">{g.descripcion}</span>
+                  )}
+                  <span className="text-xs text-stone-400">{g.fecha}</span>
                 </div>
-              ))}
-            </div>
-
-            {/* Últimos gastos del período */}
-            <div className="flex flex-col gap-3">
-              <p className="text-xs text-stone-500 font-medium">Últimos</p>
-              {ultimosGastos.length === 0 && (
-                <p className="text-xs text-stone-300 italic">Sin gastos registrados.</p>
-              )}
-              {ultimosGastos.map(g => (
-                <div
-                  key={g.id}
-                  className="flex items-center justify-between text-sm border-b border-stone-50 pb-2 last:border-0 last:pb-0"
-                >
-                  <div className="flex flex-col">
-                    <span className="text-stone-700 font-medium capitalize">
-                      {g.categoria}
-                      {g.esFijo && (
-                        <span className="ml-2 rounded-sm border border-acento px-1 text-[10px] font-semibold uppercase tracking-wide text-acento">
-                          Fijo
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-xs text-stone-400 capitalize">{g.medioPago} · {g.fecha}</span>
-                  </div>
-                  <span className="font-semibold text-stone-800">{formatARS(g.monto)}</span>
-                </div>
-              ))}
-            </div>
-          </>
+                <span className="font-semibold text-stone-800 ml-2 shrink-0">{formatARS(g.monto)}</span>
+              </button>
+            ))}
+          </div>
         )}
       </section>
 
@@ -425,6 +422,57 @@ export default function Inicio({ onCargarGasto }: Props) {
         >
           Cerrar período
         </button>
+      </section>
+
+      {/* ── EXPORTAR GASTOS ───────────────────────────────────────────── */}
+      <section className="bg-white border border-borde rounded-md p-5 shadow-sm flex flex-col gap-3">
+        <button
+          id="btn-exportar-gastos"
+          type="button"
+          onClick={() => {
+            setExportarAbierto(a => !a)
+            // Preseleccionar el período actual si no hay selección
+            if (!periodoExportarId && periodo) setPeriodoExportarId(periodo.id)
+          }}
+          className="flex w-full items-center justify-between text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
+        >
+          Exportar gastos
+          <Chevron abierto={exportarAbierto} />
+        </button>
+
+        {exportarAbierto && (
+          <div id="panel-exportar" className="flex flex-col gap-3">
+            <select
+              id="select-periodo-exportar"
+              value={periodoExportarId ?? ''}
+              onChange={e => setPeriodoExportarId(e.target.value)}
+              className="rounded-sm border border-borde px-3 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-acento"
+            >
+              {periodosOrdenados.map(p => (
+                <option key={p.id} value={p.id}>{p.nombre}</option>
+              ))}
+            </select>
+            <p id="conteo-gastos-exportar" className="text-xs text-stone-500">
+              {gastosExportar.length === 0
+                ? 'Este período no tiene gastos'
+                : `${gastosExportar.length} gasto${gastosExportar.length !== 1 ? 's' : ''}`}
+            </p>
+            <button
+              id="btn-descargar-csv"
+              type="button"
+              disabled={gastosExportar.length === 0}
+              onClick={descargarCsv}
+              className={[
+                'py-2 rounded-sm text-sm font-semibold transition-colors',
+                gastosExportar.length === 0
+                  ? 'bg-stone-100 text-stone-400 cursor-not-allowed'
+                  : 'bg-tarjeta-oscura text-acento hover:brightness-125',
+              ].join(' ')}
+            >
+              Descargar CSV
+            </button>
+          </div>
+        )}
       </section>
     </main>
   )

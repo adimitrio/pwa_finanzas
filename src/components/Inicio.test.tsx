@@ -8,6 +8,7 @@ import '@testing-library/jest-dom'
 import Inicio from './Inicio'
 import { db } from '../db/schema'
 import { diaSiguiente, gastosDelPeriodo } from '../logic/periodos'
+import * as descargarMod from '../lib/descargar'
 
 const HOY = new Date().toISOString().slice(0, 10)
 const PERIODO_ID = 'periodo-1'
@@ -32,11 +33,11 @@ async function agregarGasto(
   monto: number,
   fecha = HOY,
   id: string = crypto.randomUUID(),
-  extra: { esFijo?: boolean; descripcion?: string } = {}
+  extra: { descripcion?: string } = {}
 ) {
   await db.gastos.add({
-    id, monto, categoria: 'super', medioPago: 'debito', fecha,
-    esFijo: false, actualizadoEn: Date.now(), ...extra,
+    id, monto, categoria: 'super', fecha,
+    actualizadoEn: Date.now(), ...extra,
   })
 }
 
@@ -81,12 +82,12 @@ describe('Inicio', () => {
   it('muestra el saldo: fijos y gastos comunes descuentan por igual, y solo los del período', async () => {
     await crearPeriodo('2026-01-01')
     await agregarIngreso(50000000)
-    await agregarGasto(10000000, '2026-03-05', undefined, { esFijo: true }) // alquiler
+    await agregarGasto(10000000, '2026-03-05') // alquiler
     await agregarGasto(2000000, '2026-03-10')
     // anterior al inicio del período: no cuenta
     await agregarGasto(9999900, '2025-12-31')
 
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
 
     // 500.000 - 100.000 - 20.000 = 380.000
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$380.000'))
@@ -94,7 +95,7 @@ describe('Inicio', () => {
 
   it('agregar un ingreso lo persiste en el período actual y suma al saldo', async () => {
     await crearPeriodo()
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('toggle-ingresos')
     expandir('toggle-ingresos')
 
@@ -110,43 +111,13 @@ describe('Inicio', () => {
     expect(ingresos[0]).toMatchObject({ periodoId: PERIODO_ID, nombre: 'Bono', montoNeto: 100000 })
   })
 
-  it('un gasto con esFijo: true aparece en "Fijos" del período actual, con su total', async () => {
-    await crearPeriodo('2026-01-01')
-    await agregarGasto(1500000, '2026-03-05', undefined, { esFijo: true, descripcion: 'Luz marzo' })
-    await agregarGasto(700000, '2026-03-06') // común: no va a Fijos
-    await agregarGasto(900000, '2025-12-20', undefined, { esFijo: true, descripcion: 'Luz vieja' }) // otro período
-    render(<Inicio onCargarGasto={vi.fn()} />)
-    await porId('toggle-gastos')
-    expandir('toggle-gastos')
-
-    const fijos = await porId('gastos-fijos')
-    expect(fijos).toHaveTextContent('Luz marzo')
-    expect(fijos).not.toHaveTextContent('Luz vieja')
-    expect(fijos.querySelectorAll('.bg-stone-50')).toHaveLength(1)
-    expect(document.getElementById('total-fijos')).toHaveTextContent('$15.000')
-  })
-
-  it('"Últimos" marca con la etiqueta "Fijo" solo a los gastos fijos', async () => {
-    await crearPeriodo('2026-01-01')
-    await agregarGasto(1500000, '2026-03-05', undefined, { esFijo: true })
-    await agregarGasto(700000, '2026-03-06')
-    render(<Inicio onCargarGasto={vi.fn()} />)
-    await porId('toggle-gastos')
-    expandir('toggle-gastos')
-
-    await porId('gastos-fijos')
-    // una en "Últimos" (la subsección "Fijos" no usa la etiqueta)
-    expect(screen.getAllByText('Fijo')).toHaveLength(1)
-  })
-
   it('tocar el encabezado de "Ingresos" o "Gastos" alterna si el contenido se ve', async () => {
     await crearPeriodo()
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('toggle-ingresos')
 
     // arrancan colapsadas
     expect(document.getElementById('input-ingreso-nombre')).toBeNull()
-    expect(document.getElementById('gastos-fijos')).toBeNull()
     expect(document.getElementById('toggle-ingresos')).toHaveAttribute('aria-expanded', 'false')
 
     expandir('toggle-ingresos')
@@ -156,14 +127,14 @@ describe('Inicio', () => {
     expect(document.getElementById('input-ingreso-nombre')).toBeNull()
 
     expandir('toggle-gastos')
-    expect(document.getElementById('gastos-fijos')).not.toBeNull()
+    expect(document.getElementById('toggle-gastos')).toHaveAttribute('aria-expanded', 'true')
     expandir('toggle-gastos')
-    expect(document.getElementById('gastos-fijos')).toBeNull()
+    expect(document.getElementById('toggle-gastos')).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('las tarjetas quedan agrupadas: Ingresos, Gastos y Cerrar período', async () => {
     await crearPeriodo()
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('display-saldo')
 
     const titulos = screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
@@ -171,7 +142,7 @@ describe('Inicio', () => {
   })
 
   it('sin períodos muestra el formulario y crea el primero sin asiento de cierre', async () => {
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     fireEvent.change(await porId('input-primer-nombre'), { target: { value: 'Septiembre 2026' } })
     fireEvent.change(document.getElementById('input-primer-fecha') as HTMLElement, {
       target: { value: '2026-09-01' },
@@ -185,6 +156,164 @@ describe('Inicio', () => {
     expect(await db.ingresos.count()).toBe(0)
     expect(await db.gastos.count()).toBe(0)
   })
+
+  it('tocar una fila de gasto llama a onEditarGasto con ese gasto', async () => {
+    await crearPeriodo('2026-01-01')
+    const id = crypto.randomUUID()
+    await agregarGasto(500000, '2026-03-10', id)
+    const onEditar = vi.fn()
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={onEditar} />)
+    await porId('toggle-gastos')
+    expandir('toggle-gastos')
+
+    const fila = await waitFor(() => {
+      const btn = document.querySelector('[aria-label*="super"]') as HTMLElement
+      if (!btn) throw new Error('falta fila')
+      return btn
+    })
+    fireEvent.click(fila)
+    expect(onEditar).toHaveBeenCalledOnce()
+    expect(onEditar.mock.calls[0][0].id).toBe(id)
+  })
+
+  it('con más de 10 gastos en el período, se listan todos', async () => {
+    await crearPeriodo('2026-01-01')
+    for (let i = 0; i < 12; i++) {
+      await agregarGasto(100000, '2026-03-10')
+    }
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('toggle-gastos')
+    expandir('toggle-gastos')
+
+    await waitFor(() => {
+      const filas = document.querySelectorAll('[aria-label*="Editar gasto"]')
+      expect(filas.length).toBe(12)
+    })
+  })
+
+  it('el orden de gastos es por fecha descendente', async () => {
+    await crearPeriodo('2026-01-01')
+    await agregarGasto(100000, '2026-03-01', 'g-viejo')
+    await agregarGasto(200000, '2026-03-20', 'g-nuevo')
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('toggle-gastos')
+    expandir('toggle-gastos')
+
+    await waitFor(() => {
+      const filas = document.querySelectorAll('[aria-label*="Editar gasto"]')
+      expect(filas.length).toBe(2)
+      // el más reciente va primero
+      expect((filas[0] as HTMLElement).getAttribute('aria-label')).toContain('$2.000')
+      expect((filas[1] as HTMLElement).getAttribute('aria-label')).toContain('$1.000')
+    })
+  })
+
+  it('tras editar el monto de un gasto, el saldo se recalcula reactivamente', async () => {
+    await crearPeriodo('2026-01-01')
+    await agregarIngreso(10000000)
+    const id = 'g-editar'
+    await agregarGasto(1000000, '2026-03-10', id)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$90.000'))
+
+    // Editar el gasto directamente en la base (simula lo que haría CargarGasto en modo edición)
+    await db.gastos.put({
+      id, monto: 2000000, categoria: 'super',
+      fecha: '2026-03-10', actualizadoEn: Date.now(),
+    })
+
+    await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$80.000'))
+  })
+
+  it('tras eliminar un gasto, desaparece de la lista y del saldo', async () => {
+    await crearPeriodo('2026-01-01')
+    await agregarIngreso(10000000)
+    const id = 'g-eliminar'
+    await agregarGasto(1000000, '2026-03-10', id)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$90.000'))
+
+    await db.gastos.delete(id)
+
+    await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$100.000'))
+  })
+})
+
+describe('Exportar CSV', () => {
+  it('el botón "Exportar gastos" abre el panel con el período actual preseleccionado', async () => {
+    await crearPeriodo()
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('btn-exportar-gastos')
+
+    expect(document.getElementById('panel-exportar')).toBeNull()
+    fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
+
+    const panel = await porId('panel-exportar')
+    expect(panel).not.toBeNull()
+    const select = document.getElementById('select-periodo-exportar') as HTMLSelectElement
+    expect(select.value).toBe(PERIODO_ID)
+  })
+
+  it('cambiar el período cambia el conteo de gastos', async () => {
+    await crearPeriodo('2026-01-01', PERIODO_ID)
+    const otroPeriodoId = 'p-otro'
+    await db.periodos.add({ id: otroPeriodoId, fechaInicio: '2026-10-01', nombre: 'Octubre 2026', actualizadoEn: Date.now() })
+    // gasto en el período actual
+    await agregarGasto(100000, '2026-03-10')
+    // gasto en el otro período
+    await db.gastos.add({ id: 'g-otro', monto: 200000, categoria: 'super', fecha: '2026-10-10', actualizadoEn: Date.now() })
+
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('btn-exportar-gastos')
+    fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
+    await porId('panel-exportar')
+
+    // Período actual: 1 gasto
+    await waitFor(() => {
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 gasto')
+    })
+
+    // Cambiar al otro período: 1 gasto en Octubre
+    fireEvent.change(document.getElementById('select-periodo-exportar') as HTMLElement, {
+      target: { value: otroPeriodoId },
+    })
+    await waitFor(() => {
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 gasto')
+    })
+  })
+
+  it('"Descargar CSV" llama a descargarArchivo con nombre y contenido esperados', async () => {
+    const spy = vi.spyOn(descargarMod, 'descargarArchivo').mockImplementation(() => {})
+    await crearPeriodo('2026-01-01', PERIODO_ID)
+    await db.periodos.clear()
+    await db.periodos.add({ id: PERIODO_ID, fechaInicio: '2026-01-01', nombre: 'Enero 2026', actualizadoEn: Date.now() })
+    await agregarGasto(100000, '2026-01-10')
+
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('btn-exportar-gastos')
+    fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
+    await porId('btn-descargar-csv')
+    fireEvent.click(document.getElementById('btn-descargar-csv') as HTMLElement)
+
+    await waitFor(() => expect(spy).toHaveBeenCalledOnce())
+    const [nombre, contenido, mime] = spy.mock.calls[0]
+    expect(nombre).toBe('gastos-enero-2026.csv')
+    expect(contenido).toContain('fecha,monto,categoria,descripcion,periodo')
+    expect(mime).toContain('text/csv')
+  })
+
+  it('período sin gastos → botón deshabilitado y texto descriptivo', async () => {
+    await crearPeriodo()
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('btn-exportar-gastos')
+    fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
+    await porId('panel-exportar')
+
+    await waitFor(() => {
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('Este período no tiene gastos')
+    })
+    expect(document.getElementById('btn-descargar-csv')).toBeDisabled()
+  })
 })
 
 describe('Cerrar período', () => {
@@ -192,7 +321,7 @@ describe('Cerrar período', () => {
     await crearPeriodo()
     await agregarIngreso(50000000)
     await agregarGasto(2000000)
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$480.000'))
 
     cerrarPeriodoUI('Octubre 2026', HOY)
@@ -211,7 +340,7 @@ describe('Cerrar período', () => {
     await crearPeriodo()
     await agregarIngreso(1000000)
     await agregarGasto(3000000, dia(HOY, -1))
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('-$20.000'))
 
     cerrarPeriodoUI('Octubre 2026')
@@ -219,7 +348,7 @@ describe('Cerrar período', () => {
     await waitFor(() => expect(tituloSaldo()).toHaveTextContent('Octubre 2026'))
     const nuevo = (await db.periodos.toArray()).find(p => p.id !== PERIODO_ID)!
     const deuda = (await db.gastos.toArray()).find(g => g.descripcion === 'Deuda mes anterior')!
-    expect(deuda).toMatchObject({ monto: 2000000, categoria: 'otros', medioPago: 'debito' })
+    expect(deuda).toMatchObject({ monto: 2000000, categoria: 'otros' })
     expect(deuda).not.toHaveProperty('periodoId')
     expect(deuda.fecha).toBe(nuevo.fechaInicio) // no "hoy": cae dentro de su propio período
     expect(gastosDelPeriodo([deuda], nuevo)).toHaveLength(1)
@@ -232,7 +361,7 @@ describe('Cerrar período', () => {
     await crearPeriodo()
     await agregarIngreso(50000000)
     await agregarGasto(2000000, dia(HOY, -1))
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$480.000'))
 
     cerrarPeriodoUI('Octubre 2026')
@@ -245,7 +374,7 @@ describe('Cerrar período', () => {
     await crearPeriodo()
     await agregarIngreso(50000000)
     await agregarGasto(2000000) // hoy
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$480.000'))
     expect(await porId('input-fecha-fin')).toHaveValue(dia(HOY, -1))
 
@@ -263,7 +392,7 @@ describe('Cerrar período', () => {
 
   it('si el período empezó hoy, el cierre por defecto (ayer) da error hasta editar la fecha', async () => {
     await crearPeriodo(HOY)
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('input-fecha-fin')
 
     cerrarPeriodoUI('Octubre 2026')
@@ -275,7 +404,7 @@ describe('Cerrar período', () => {
   it('no hace nada si el usuario cancela el confirm', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
     await crearPeriodo()
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('input-fecha-fin')
 
     cerrarPeriodoUI('Octubre 2026')
@@ -290,7 +419,7 @@ describe('Cerrar período', () => {
     await agregarIngreso(50000000)
     await agregarGasto(1000000, dia(HOY, -3), 'g-antes')
     await agregarGasto(500000, dia(HOY, -1), 'g-despues')
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await waitFor(() => expect(saldoEnPantalla()).toHaveTextContent('$485.000'))
 
     cerrarPeriodoUI('Octubre 2026', fin)
@@ -317,7 +446,7 @@ describe('Cerrar período', () => {
 
   it('con fecha de fin futura muestra error y no ejecuta nada', async () => {
     await crearPeriodo()
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('input-fecha-fin')
 
     cerrarPeriodoUI('Octubre 2026', dia(HOY, 1))
@@ -329,7 +458,7 @@ describe('Cerrar período', () => {
 
   it('con fecha de fin anterior al inicio del período muestra error y no ejecuta nada', async () => {
     await crearPeriodo('2026-09-10')
-    render(<Inicio onCargarGasto={vi.fn()} />)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('input-fecha-fin')
 
     cerrarPeriodoUI('Octubre 2026', '2026-09-09')

@@ -14,9 +14,7 @@ describe('Gasto', () => {
       id: crypto.randomUUID(),
       monto: 150000,
       categoria: 'super',
-      medioPago: 'debito',
       fecha: '2024-09-15',
-      esFijo: false,
       actualizadoEn: Date.now(),
     }
 
@@ -50,18 +48,14 @@ describe('Consulta por índice', () => {
       id: crypto.randomUUID(),
       monto: 100000,
       categoria: 'comida',
-      medioPago: 'efectivo',
       fecha: '2024-09-01',
-      esFijo: false,
       actualizadoEn: Date.now(),
     }
     const gastoB: Gasto = {
       id: crypto.randomUUID(),
       monto: 200000,
       categoria: 'transporte',
-      medioPago: 'debito',
       fecha: '2024-09-15',
-      esFijo: false,
       actualizadoEn: Date.now(),
     }
 

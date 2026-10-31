@@ -2,15 +2,12 @@ import Dexie, { type Table } from 'dexie'
 
 export type Categoria =
   | 'super' | 'comida' | 'transporte' | 'salud' | 'hogar' | 'ocio' | 'otros'
-export type MedioPago = 'efectivo' | 'debito' | 'credito'
 
 export interface Gasto {
   id: string           // UUID (crypto.randomUUID())
   monto: number         // centavos, entero — nunca float
   categoria: Categoria
-  medioPago: MedioPago
   fecha: string          // 'YYYY-MM-DD'
-  esFijo: boolean        // etiqueta: gasto habitual (luz, alquiler); no descuenta solo
   descripcion?: string   // ej. 'Deuda mes anterior'
   actualizadoEn: number  // Date.now()
 }
@@ -45,7 +42,7 @@ class FinanzasDB extends Dexie {
     })
     this.version(2).stores({
       gastos: 'id, fecha, categoria',
-      gastosFijos: null, // tabla eliminada: ahora "fijo" es una etiqueta en Gasto
+      gastosFijos: null, // tabla eliminada: los gastos fijos ya no existen como concepto
       ingresos: 'id, periodoId',
       periodos: 'id, fechaInicio'
     })

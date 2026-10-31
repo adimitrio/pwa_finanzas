@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/schema'
-import type { Categoria, MedioPago } from '../db/schema'
+import type { Categoria, Gasto } from '../db/schema'
 
 const CATEGORIAS: Categoria[] = [
   'super', 'comida', 'transporte', 'salud', 'hogar', 'ocio', 'otros',
@@ -16,14 +16,6 @@ const CATEGORIA_LABELS: Record<Categoria, string> = {
   otros: '📦 Otros',
 }
 
-const MEDIOS: MedioPago[] = ['efectivo', 'debito', 'credito']
-
-const MEDIO_LABELS: Record<MedioPago, string> = {
-  efectivo: 'Efectivo',
-  debito: 'Débito',
-  credito: 'Crédito',
-}
-
 // Cuánto se muestra "✓ Guardado" antes de volver a Inicio
 const MS_CONFIRMACION = 600
 
@@ -31,16 +23,18 @@ const CLASE_TECLA =
   'bg-white border border-borde rounded-sm text-xl font-semibold text-stone-700 shadow-sm active:scale-95 hover:bg-stone-50 transition-all duration-100'
 
 interface Props {
+  gasto?: Gasto
   onVolver: () => void
 }
 
-export default function CargarGasto({ onVolver }: Props) {
+export default function CargarGasto({ gasto, onVolver }: Props) {
+  const modoEdicion = gasto !== undefined
+
   // pesos acumulados desde el teclado numérico (centavos = pesos * 100)
-  const [pesos, setPesos] = useState(0)
-  const [categoria, setCategoria] = useState<Categoria>('otros')
-  const [medioPago, setMedioPago] = useState<MedioPago>('debito')
-  const [descripcion, setDescripcion] = useState('')
-  const [esFijo, setEsFijo] = useState(false)
+  const [pesos, setPesos] = useState(() => modoEdicion ? Math.trunc(gasto.monto / 100) : 0)
+  const [categoria, setCategoria] = useState<Categoria>(() => modoEdicion ? gasto.categoria : 'otros')
+  const [descripcion, setDescripcion] = useState(() => modoEdicion ? (gasto.descripcion ?? '') : '')
+  const [fecha, setFecha] = useState(() => modoEdicion ? gasto.fecha : '')
   const [guardado, setGuardado] = useState(false)
   const timerVolver = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -67,9 +61,7 @@ export default function CargarGasto({ onVolver }: Props) {
   function resetForm() {
     setPesos(0)
     setCategoria('otros')
-    setMedioPago('debito')
     setDescripcion('')
-    setEsFijo(false)
   }
 
   // ✕: vuelve sin guardar y cancela una navegación pendiente (evita llamar dos veces)
@@ -79,21 +71,33 @@ export default function CargarGasto({ onVolver }: Props) {
   }
 
   async function guardar() {
-    if (pesos === 0) return
     const texto = descripcion.trim()
-    await db.gastos.add({
-      id: crypto.randomUUID(),
-      monto: pesos * 100,  // centavos
-      categoria,
-      medioPago,
-      fecha: new Date().toISOString().slice(0, 10),
-      esFijo,
-      // sin descripción, el campo no se guarda (no un string vacío)
-      ...(texto ? { descripcion: texto } : {}),
-      actualizadoEn: Date.now(),
-    })
+    if (modoEdicion) {
+      // Modo edición: usa put con objeto armado campo a campo (sin spread del viejo)
+      if (!fecha) return
+      await db.gastos.put({
+        id: gasto.id,
+        monto: pesos * 100,
+        categoria,
+        fecha,
+        ...(texto ? { descripcion: texto } : {}),
+        actualizadoEn: Date.now(),
+      })
+    } else {
+      // Modo carga: add nuevo
+      if (pesos === 0) return
+      await db.gastos.add({
+        id: crypto.randomUUID(),
+        monto: pesos * 100,  // centavos
+        categoria,
+        fecha: new Date().toISOString().slice(0, 10),
+        // sin descripción, el campo no se guarda (no un string vacío)
+        ...(texto ? { descripcion: texto } : {}),
+        actualizadoEn: Date.now(),
+      })
+      resetForm()
+    }
     setGuardado(true)
-    resetForm()
     // dejar que se pinte "✓ Guardado" antes de navegar
     timerVolver.current = setTimeout(() => {
       setGuardado(false)
@@ -101,12 +105,25 @@ export default function CargarGasto({ onVolver }: Props) {
     }, MS_CONFIRMACION)
   }
 
+  async function eliminar() {
+    if (!modoEdicion) return
+    const ok = window.confirm('¿Eliminar este gasto?')
+    if (!ok) return
+    await db.gastos.delete(gasto.id)
+    onVolver()
+  }
+
   const montoDisplay = pesos.toLocaleString('es-AR')
+
+  // En modo edición: guardado deshabilita el botón (y si la fecha está vacía también)
+  const guardarDeshabilitado = modoEdicion
+    ? (guardado || !fecha || pesos === 0)
+    : (pesos === 0)
 
   return (
     <main className="h-dvh bg-fondo flex flex-col justify-between gap-3 px-4 py-3 max-w-sm mx-auto">
 
-      {/* Encabezado: volver sin guardar + monto */}
+      {/* Encabezado: volver sin guardar + monto + fecha (solo en edición) */}
       <section className="w-full">
         <div className="relative flex items-center justify-center">
           <button
@@ -119,8 +136,18 @@ export default function CargarGasto({ onVolver }: Props) {
             ✕
           </button>
           <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest">
-            Monto
+            {modoEdicion ? 'Editar gasto' : 'Monto'}
           </p>
+          {modoEdicion && (
+            <input
+              id="input-fecha"
+              type="date"
+              aria-label="Fecha"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              className="absolute right-0 text-xs text-stone-500 border border-borde rounded-sm px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-acento"
+            />
+          )}
         </div>
         <div
           id="display-monto"
@@ -159,67 +186,22 @@ export default function CargarGasto({ onVolver }: Props) {
         </div>
       </section>
 
-      {/* Medio de pago */}
+      {/* Descripción (opcional) */}
       <section className="w-full">
-        <p className="text-xs font-semibold text-stone-400 uppercase tracking-widest mb-1.5">
-          Medio de pago
-        </p>
-        <div className="flex gap-2" role="group" aria-label="Medio de pago">
-          {MEDIOS.map(medio => (
-            <button
-              key={medio}
-              id={`medio-${medio}`}
-              type="button"
-              onClick={() => setMedioPago(medio)}
-              aria-pressed={medioPago === medio}
-              className={[
-                'flex-1 rounded-sm py-2 text-sm font-semibold transition-all duration-150',
-                medioPago === medio
-                  ? 'bg-tarjeta-oscura text-acento shadow-md'
-                  : 'bg-white text-stone-600 shadow-sm hover:bg-stone-100',
-              ].join(' ')}
-            >
-              {MEDIO_LABELS[medio]}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Descripción (opcional) y etiqueta "fijo" */}
-      <section className="w-full">
-        <div className="flex items-center gap-3">
-          <input
-            id="input-descripcion"
-            type="text"
-            placeholder="Descripción (opcional)"
-            aria-label="Descripción"
-            value={descripcion}
-            onChange={e => setDescripcion(e.target.value)}
-            className="flex-1 min-w-0 rounded-sm border border-borde bg-white px-3 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-acento"
-          />
-          <label
-            htmlFor="check-es-fijo"
-            className="flex items-center gap-1.5 text-sm font-semibold text-stone-600 select-none"
-          >
-            <input
-              id="check-es-fijo"
-              type="checkbox"
-              checked={esFijo}
-              onChange={e => setEsFijo(e.target.checked)}
-              className="w-5 h-5 accent-tarjeta-oscura"
-            />
-            Es fijo
-          </label>
-        </div>
-        <p className="mt-1 text-[11px] leading-tight text-stone-400">
-          Para identificarlo como gasto habitual (luz, alquiler, suscripciones). Lo cargás igual
-          cada vez, con el monto real.
-        </p>
+        <input
+          id="input-descripcion"
+          type="text"
+          placeholder="Descripción (opcional)"
+          aria-label="Descripción"
+          value={descripcion}
+          onChange={e => setDescripcion(e.target.value)}
+          className="w-full rounded-sm border border-borde bg-white px-3 py-2 text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-acento"
+        />
       </section>
 
       {/* Teclado numérico: absorbe el alto sobrante (o lo cede en pantallas chicas) */}
       <section className="w-full flex-1 min-h-36">
-        <div className="grid grid-cols-3 grid-rows-4 gap-2 h-full">
+        <div className="grid h-full grid-cols-3 grid-rows-4 gap-2">
           {['1','2','3','4','5','6','7','8','9'].map(d => (
             <button
               key={d}
@@ -260,24 +242,36 @@ export default function CargarGasto({ onVolver }: Props) {
         </div>
       </section>
 
-      {/* Guardar */}
+      {/* Guardar / Guardar cambios */}
       <button
         id="btn-guardar"
         type="button"
         onClick={() => { void guardar() }}
-        disabled={pesos === 0}
+        disabled={guardarDeshabilitado}
         className={[
           'w-full py-3 rounded-md text-lg font-bold tracking-wide transition-all duration-200',
           // guardado va primero: el monto ya se reseteó a 0 y el verde tiene que verse
           guardado
             ? 'bg-green-500 text-white'
-            : pesos === 0
+            : guardarDeshabilitado
               ? 'bg-stone-200 text-stone-400 cursor-not-allowed'
               : 'bg-tarjeta-oscura text-acento shadow-lg hover:brightness-125 active:scale-95',
         ].join(' ')}
       >
-        {guardado ? '✓ Guardado' : 'Guardar gasto'}
+        {guardado ? '✓ Guardado' : modoEdicion ? 'Guardar cambios' : 'Guardar gasto'}
       </button>
+
+      {/* Eliminar (solo en modo edición) */}
+      {modoEdicion && (
+        <button
+          id="btn-eliminar"
+          type="button"
+          onClick={() => { void eliminar() }}
+          className="mt-1 min-h-[44px] w-full rounded-md border border-peligro bg-transparent text-sm font-semibold text-peligro active:bg-peligro active:text-white"
+        >
+          Eliminar gasto
+        </button>
+      )}
     </main>
   )
 }

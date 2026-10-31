@@ -22,12 +22,12 @@ todo se guarda localmente en el dispositivo. Cada feature tiene su spec en
   `src/logic/`. Nunca se guarda un resultado calculado en la base.
 
 ## Modelo de datos
-Ver `src/db/schema.ts`. Tres tablas: `gastos`, `ingresos`, `periodos`. "Fijo" no es
-tabla: es la etiqueta `esFijo` de un `Gasto`.
+Ver `src/db/schema.ts`. Tres tablas: `gastos`, `ingresos`, `periodos`. `Gasto` no tiene concepto
+de fijo ni de medio de pago.
 No agregar tablas ni campos nuevos que no estén pedidos en un spec.
 
 ## Alcance del MVP — no salirse de acá sin avisar
-**Adentro:** carga rápida de gasto, saldo del mes, gastos fijos editables,
+**Adentro:** carga rápida de gasto, saldo del mes, editar y eliminar gastos, exportar CSV,
 ingreso simple (sin historial de aumentos ni aguinaldo todavía), PWA
 instalable y offline, exportar/importar JSON como backup.
 
@@ -49,3 +49,6 @@ avisar antes de implementarlo — no expandir el alcance en silencio.
    con `npm run test` en rojo.
 3. Preferir tipos explícitos sobre `any`. Componentes chicos y enfocados.
 4. Commits chicos: uno por feature o corrección, con mensaje descriptivo.
+
+## Diseño
+El diseño de las pantallas es el de `specs/diseno/` (Inicio, Cargar gasto, Editar gasto). No cambiar colores, esquinas ni tipografía sin un spec que lo pida.

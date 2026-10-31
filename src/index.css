@@ -6,6 +6,7 @@
   --color-tarjeta-oscura: #1D1C1A;
   --color-acento: #C9A24D;
   --color-borde: #E5DFD3;
+  --color-peligro: #A8432F;   /* terracota: SOLO el botón Eliminar */
 
   --radius-sm: 0px;   /* inputs, botones chicos, teclado, categorías, chips */
   --radius-md: 0px;   /* tarjetas y botones grandes (Cargar gasto, Guardar, Cerrar) */

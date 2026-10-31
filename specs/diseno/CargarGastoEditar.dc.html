@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Editar gasto</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#F3EFE6;font-variant-numeric:tabular-nums}
+input::placeholder{color:#A6A09B}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F3EFE6; color: #292524; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 12px 16px">
+
+<section>
+<div style="position: relative; display: flex; align-items: center; justify-content: center; height: 44px">
+<a href="Main.dc.html" aria-label="Volver" style="position: absolute; left: 0; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 24px; line-height: 1; color: #A6A09B; text-decoration: none">✕</a>
+<p style="margin: 0; font-size: 12px; font-weight: 600; color: #A6A09B; text-transform: uppercase; letter-spacing: 0.1em">Editar gasto</p>
+<input type="date" aria-label="Fecha" value="2026-10-25" style="position: absolute; right: 0; box-sizing: border-box; border: 1px solid #E5DFD3; border-radius: 0; background: #FFFFFF; padding: 2px 4px; font: inherit; font-size: 12px; color: #79716B">
+</div>
+<div style="text-align: center; font-family: Fraunces, Georgia, serif; font-size: 48px; font-weight: 600; letter-spacing: -0.025em; line-height: 1; padding: 8px 0; color: #292524" aria-live="polite">
+<span style="font-size: 24px; color: #A6A09B; margin-right: 4px">$</span><span>{{ amount }}</span>
+</div>
+</section>
+
+<section>
+<p style="margin: 0 0 6px; font-size: 12px; font-weight: 600; color: #A6A09B; text-transform: uppercase; letter-spacing: 0.1em">Categoría</p>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{ cats }}" as="c" hint-placeholder-count="7">
+<button type="button" onClick="{{ c.pick }}" aria-pressed="{{ c.pressed }}" style="{{ c.style }}">
+<span style="font-size: 18px; line-height: 1.25">{{ c.icon }}</span>
+<span style="line-height: 1.33">{{ c.label }}</span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section>
+<input type="text" aria-label="Descripción" placeholder="Descripción (opcional)" value="{{ descripcion }}" onInput="{{ onDescripcion }}" style="width: 100%; box-sizing: border-box; border: 1px solid #E5DFD3; border-radius: 0; background: #FFFFFF; padding: 8px 12px; font: inherit; font-size: 14px; color: #44403B">
+</section>
+
+<section style="flex-grow: 1; min-height: 144px; display: flex">
+<div style="flex-grow: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{ keys }}" as="k" hint-placeholder-count="12">
+<button type="button" onClick="{{ k.press }}" aria-label="{{ k.aria }}" style="{{ k.style }}">{{ k.label }}</button>
+</sc-for>
+</div>
+</section>
+
+<div style="display: flex; flex-direction: column; gap: 16px">
+<sc-if value="{{ hasAmount }}" hint-placeholder-val="{{ true }}">
+<a href="Main.dc.html" style="display: block; box-sizing: border-box; width: 100%; padding: 12px 0; background: #1D1C1A; color: #C9A24D; font-size: 18px; font-weight: 700; letter-spacing: 0.025em; text-align: center; text-decoration: none; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)">Guardar cambios</a>
+</sc-if>
+<sc-if value="{{ noAmount }}" hint-placeholder-val="{{ false }}">
+<button type="button" disabled style="width: 100%; padding: 12px 0; border: 0; border-radius: 0; background: #E7E5E4; color: #A6A09B; font: inherit; font-size: 18px; font-weight: 700; letter-spacing: 0.025em; cursor: not-allowed">Guardar cambios</button>
+</sc-if>
+<a href="Main.dc.html" style="display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 100%; min-height: 44px; border: 1px solid #A8432F; background: transparent; color: #A8432F; font-size: 14px; font-weight: 600; text-decoration: none">Eliminar gasto</a>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { digits: '32450', cat: 'super', descripcion: 'Compra de la semana' };
+  }
+  fmt(s) {
+    if (!s) return '0';
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  }
+  renderVals() {
+    const st = this.state;
+    const sombraOn = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)';
+    const sombraOff = '0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)';
+    const catList = [
+      ['super', '🛒', 'Super'], ['comida', '🍽️', 'Comida'], ['transporte', '🚌', 'Transporte'], ['salud', '💊', 'Salud'],
+      ['hogar', '🏠', 'Hogar'], ['ocio', '🎮', 'Ocio'], ['otros', '📦', 'Otros']
+    ];
+    const cats = catList.map(([id, icon, label]) => {
+      const on = st.cat === id;
+      return {
+        icon, label,
+        pressed: on ? 'true' : 'false',
+        pick: () => this.setState({ cat: id }),
+        style: 'border: 0; border-radius: 0; padding: 6px 4px; font: inherit; font-size: 12px; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; ' +
+          (on ? 'background: #1D1C1A; color: #C9A24D; transform: scale(1.05); box-shadow: ' + sombraOn : 'background: #FFFFFF; color: #57534E; box-shadow: ' + sombraOff)
+      };
+    });
+    const teclaStyle = 'border: 1px solid #E5DFD3; border-radius: 0; background: #FFFFFF; font: inherit; font-size: 20px; font-weight: 600; cursor: pointer; box-shadow: ' + sombraOff + '; color: ';
+    const add = (d) => () => {
+      const next = (this.state.digits + d).replace(/^0+/, '');
+      if (next === '' || parseInt(next, 10) <= 9999999) this.setState({ digits: next });
+    };
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'].map((d) => ({
+      label: d, aria: d, style: teclaStyle + '#44403B', press: add(d)
+    }));
+    keys.push({
+      label: '⌫', aria: 'Borrar último dígito', style: teclaStyle + '#A6A09B',
+      press: () => this.setState({ digits: this.state.digits.slice(0, -1) })
+    });
+    const hasAmount = !!st.digits;
+    return {
+      amount: this.fmt(st.digits),
+      cats,
+      keys,
+      descripcion: st.descripcion,
+      onDescripcion: (e) => this.setState({ descripcion: e.target.value }),
+      hasAmount,
+      noAmount: !hasAmount
+    };
+  }
+}
+</script>
+</body>
+</html>
