@@ -6,7 +6,7 @@ import { calcularSaldoDelMes } from '../logic/saldo'
 import {
   obtenerPeriodoActual, calcularAsientoDeCierre, diaSiguiente, gastosDelPeriodo,
 } from '../logic/periodos'
-import { gastosACsv, nombreArchivoCsv } from '../logic/exportarCsv'
+import { movimientosACsv, nombreArchivoCsv } from '../logic/exportarCsv'
 import { descargarArchivo } from '../lib/descargar'
 
 const hoy = () => new Date().toISOString().slice(0, 10) // 'YYYY-MM-DD'
@@ -51,6 +51,7 @@ export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
     [periodoId]
   ) ?? []
   const todosLosGastos = useLiveQuery(() => db.gastos.toArray()) ?? []
+  const todosLosIngresos = useLiveQuery(() => db.ingresos.toArray()) ?? []
   const gastosDelMes = periodo ? gastosDelPeriodo(todosLosGastos, periodo) : []
   // Todos los gastos del período, ordenados por fecha desc y actualizadoEn desc
   const gastosOrdenados = [...gastosDelMes]
@@ -84,6 +85,10 @@ export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
   const gastosExportar = periodoExportar
     ? gastosDelPeriodo(todosLosGastos, periodoExportar)
     : []
+  const ingresosExportar = periodoExportar
+    ? todosLosIngresos.filter(i => i.periodoId === periodoExportar.id)
+    : []
+  const sinMovimientos = gastosExportar.length === 0 && ingresosExportar.length === 0
 
   // ── cálculo de saldo ─────────────────────────────────────────────────────
   const ingresoNeto = ingresos.reduce((acc, i) => acc + i.montoNeto, 0)
@@ -194,7 +199,7 @@ export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
 
   function descargarCsv() {
     if (!periodoExportar) return
-    const csv = gastosACsv(todosLosGastos, periodoExportar)
+    const csv = movimientosACsv(todosLosGastos, todosLosIngresos, periodoExportar)
     const nombre = nombreArchivoCsv(periodoExportar)
     descargarArchivo(nombre, csv, 'text/csv;charset=utf-8')
   }
@@ -436,7 +441,7 @@ export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
           }}
           className="flex w-full items-center justify-between text-sm font-semibold text-stone-500 hover:text-stone-700 transition-colors"
         >
-          Exportar gastos
+          Exportar ingresos y gastos
           <Chevron abierto={exportarAbierto} />
         </button>
 
@@ -453,18 +458,18 @@ export default function Inicio({ onCargarGasto, onEditarGasto }: Props) {
               ))}
             </select>
             <p id="conteo-gastos-exportar" className="text-xs text-stone-500">
-              {gastosExportar.length === 0
-                ? 'Este período no tiene gastos'
-                : `${gastosExportar.length} gasto${gastosExportar.length !== 1 ? 's' : ''}`}
+              {sinMovimientos
+                ? 'Este período no tiene movimientos'
+                : `${ingresosExportar.length} ingreso${ingresosExportar.length !== 1 ? 's' : ''} y ${gastosExportar.length} gasto${gastosExportar.length !== 1 ? 's' : ''}`}
             </p>
             <button
               id="btn-descargar-csv"
               type="button"
-              disabled={gastosExportar.length === 0}
+              disabled={sinMovimientos}
               onClick={descargarCsv}
               className={[
                 'py-2 rounded-sm text-sm font-semibold transition-colors',
-                gastosExportar.length === 0
+                sinMovimientos
                   ? 'bg-stone-100 text-stone-400 cursor-not-allowed'
                   : 'bg-tarjeta-oscura text-acento hover:brightness-125',
               ].join(' ')}

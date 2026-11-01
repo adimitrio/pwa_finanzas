@@ -240,7 +240,7 @@ describe('Inicio', () => {
 })
 
 describe('Exportar CSV', () => {
-  it('el botón "Exportar gastos" abre el panel con el período actual preseleccionado', async () => {
+  it('el botón "Exportar ingresos y gastos" abre el panel con el período actual preseleccionado', async () => {
     await crearPeriodo()
     render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('btn-exportar-gastos')
@@ -254,13 +254,14 @@ describe('Exportar CSV', () => {
     expect(select.value).toBe(PERIODO_ID)
   })
 
-  it('cambiar el período cambia el conteo de gastos', async () => {
+  it('cambiar el período cambia el conteo', async () => {
     await crearPeriodo('2026-01-01', PERIODO_ID)
     const otroPeriodoId = 'p-otro'
     await db.periodos.add({ id: otroPeriodoId, fechaInicio: '2026-10-01', nombre: 'Octubre 2026', actualizadoEn: Date.now() })
     // gasto en el período actual
     await agregarGasto(100000, '2026-03-10')
     // gasto en el otro período
+    await agregarIngreso(500000, otroPeriodoId)
     await db.gastos.add({ id: 'g-otro', monto: 200000, categoria: 'super', fecha: '2026-10-10', actualizadoEn: Date.now() })
 
     render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
@@ -268,17 +269,17 @@ describe('Exportar CSV', () => {
     fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
     await porId('panel-exportar')
 
-    // Período actual: 1 gasto
+    // Período actual (Octubre): 1 ingreso y 1 gasto (singular)
     await waitFor(() => {
-      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 gasto')
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 ingreso y 1 gasto')
     })
 
-    // Cambiar al otro período: 1 gasto en Octubre
+    // Cambiar al período viejo: sin ingresos
     fireEvent.change(document.getElementById('select-periodo-exportar') as HTMLElement, {
-      target: { value: otroPeriodoId },
+      target: { value: PERIODO_ID },
     })
     await waitFor(() => {
-      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 gasto')
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('0 ingresos y')
     })
   })
 
@@ -288,6 +289,7 @@ describe('Exportar CSV', () => {
     await db.periodos.clear()
     await db.periodos.add({ id: PERIODO_ID, fechaInicio: '2026-01-01', nombre: 'Enero 2026', actualizadoEn: Date.now() })
     await agregarGasto(100000, '2026-01-10')
+    await agregarIngreso(250000000)
 
     render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('btn-exportar-gastos')
@@ -297,12 +299,27 @@ describe('Exportar CSV', () => {
 
     await waitFor(() => expect(spy).toHaveBeenCalledOnce())
     const [nombre, contenido, mime] = spy.mock.calls[0]
-    expect(nombre).toBe('gastos-enero-2026.csv')
-    expect(contenido).toContain('fecha,monto,categoria,descripcion,periodo')
+    expect(nombre).toBe('movimientos-enero-2026.csv')
+    expect(contenido).toContain('tipo,fecha,monto,categoria,descripcion,periodo')
+    expect(contenido).toContain('ingreso,2026-01-01,2500000.00,,Sueldo,Enero 2026')
     expect(mime).toContain('text/csv')
   })
 
-  it('período sin gastos → botón deshabilitado y texto descriptivo', async () => {
+  it('período con solo ingresos → botón habilitado', async () => {
+    await crearPeriodo()
+    await agregarIngreso(100000)
+    render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
+    await porId('btn-exportar-gastos')
+    fireEvent.click(document.getElementById('btn-exportar-gastos') as HTMLElement)
+    await porId('panel-exportar')
+
+    await waitFor(() => {
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('1 ingreso y 0 gastos')
+    })
+    expect(document.getElementById('btn-descargar-csv')).toBeEnabled()
+  })
+
+  it('período vacío → botón deshabilitado y texto descriptivo', async () => {
     await crearPeriodo()
     render(<Inicio onCargarGasto={vi.fn()} onEditarGasto={vi.fn()} />)
     await porId('btn-exportar-gastos')
@@ -310,7 +327,7 @@ describe('Exportar CSV', () => {
     await porId('panel-exportar')
 
     await waitFor(() => {
-      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('Este período no tiene gastos')
+      expect(document.getElementById('conteo-gastos-exportar')).toHaveTextContent('Este período no tiene movimientos')
     })
     expect(document.getElementById('btn-descargar-csv')).toBeDisabled()
   })

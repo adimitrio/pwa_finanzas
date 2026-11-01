@@ -50,5 +50,11 @@ avisar antes de implementarlo — no expandir el alcance en silencio.
 3. Preferir tipos explícitos sobre `any`. Componentes chicos y enfocados.
 4. Commits chicos: uno por feature o corrección, con mensaje descriptivo.
 
+## Exportación CSV
+El contrato está en `specs/exportar-ingresos-csv.md`: un archivo por período
+(`movimientos-<período>.csv`), columnas `tipo,fecha,monto,categoria,descripcion,periodo`,
+ingresos primero y luego gastos por fecha, monto siempre positivo con 2 decimales
+(aritmética de enteros, sin float). Cambiar el contrato requiere avisar.
+
 ## Diseño
 El diseño de las pantallas es el de `specs/diseno/` (Inicio, Cargar gasto, Editar gasto). No cambiar colores, esquinas ni tipografía sin un spec que lo pida.

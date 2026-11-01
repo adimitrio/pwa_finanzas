@@ -8,28 +8,8 @@ sistema (seguimiento) los consuma. Funciona offline: todo se arma en el
 navegador con lo que hay en IndexedDB, sin servidor.
 
 ## Contrato del CSV
-Este formato es un contrato con el otro sistema: no cambiar columnas ni
-orden sin avisar.
-
-- Una fila por gasto, primera fila = encabezado.
-- Columnas, en este orden:
-  `fecha,monto,categoria,descripcion,periodo`
-  (sin `id` ni `medio_pago`: el otro sistema reemplaza por período)
-  - `fecha`: 'YYYY-MM-DD', tal cual está guardada.
-  - `monto`: pesos con punto decimal y siempre 2 decimales
-    (`4800.00`, `45000.50`), sin separador de miles ni símbolo `$`.
-    Se calcula con aritmética de enteros sobre los centavos
-    (`Math.trunc(c / 100)` y `c % 100` con padding), NO con
-    `c / 100` en float.
-  - `categoria`: el id guardado (`super`, `comida`, `transporte`, ...), no
-    la etiqueta ni el emoji.
-  - `descripcion`: texto libre; vacío si no tiene.
-  - `periodo`: el `nombre` del período exportado (ej. `Octubre 2026`).
-- Separador: coma. Fin de línea: `\r\n`. Codificación: UTF-8.
-- Escapado estilo RFC 4180: si un campo contiene coma, comilla doble o
-  salto de línea, va entre comillas dobles y las comillas internas se
-  duplican (`"Pan, leche y ""otros"""`).
-- Orden de filas: `fecha` ascendente.
+El contrato vigente está en `specs/exportar-ingresos-csv.md` (incluye
+ingresos y reemplaza columnas, nombre de archivo y UI de este spec).
 
 ## Lógica pura (`src/logic/exportarCsv.ts`)
 - `gastosACsv(gastos: Gasto[], periodo: Periodo): string`
